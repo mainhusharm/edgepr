@@ -64,7 +64,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   // Check if user has given consent
   useEffect(() => {
     const consentGiven = localStorage.getItem('user_consent_accepted');
-    if (!consentGiven && user?.setupComplete) {
+    if (!consentGiven && user?.isAuthenticated && user?.setupComplete) {
       setShowConsentForm(true);
     }
   }, [user]);
@@ -180,12 +180,50 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   }, [selectedTimezone, currentTime]);
 
   const handleConsentAccept = () => {
+    localStorage.setItem('user_consent_accepted', 'true');
     setShowConsentForm(false);
   };
 
   const handleConsentDecline = () => {
     onLogout();
   };
+
+  // Load trading plan and user data on component mount
+  useEffect(() => {
+    if (user?.email) {
+      // Load user-specific data
+      const userKey = `user_data_${user.email}`;
+      const savedUserData = localStorage.getItem(userKey);
+      
+      if (savedUserData) {
+        const userData = JSON.parse(savedUserData);
+        // Update trading plan context with saved data
+        if (userData.tradingPlan) {
+          updateTradingPlan(userData.tradingPlan);
+        }
+        if (userData.propFirm) {
+          updatePropFirm(userData.propFirm);
+        }
+        if (userData.accountConfig) {
+          updateAccountConfig(userData.accountConfig);
+        }
+      }
+    }
+  }, [user?.email]);
+
+  // Save user data whenever trading plan changes
+  useEffect(() => {
+    if (user?.email && tradingPlan) {
+      const userKey = `user_data_${user.email}`;
+      const userData = {
+        tradingPlan,
+        propFirm: propFirm,
+        accountConfig: accountConfig,
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(userKey, JSON.stringify(userData));
+    }
+  }, [user?.email, tradingPlan, propFirm, accountConfig]);
 
   const fetchAccounts = async () => {
     try {
@@ -230,8 +268,9 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   useEffect(() => {
     const initState = async () => {
       if (user && tradingPlan && currentAccount) {
-        // Load state from localStorage first, then from API
-        const localState = localStorage.getItem(`trading_state_${user.id}`);
+        // Load user-specific trading state
+        const stateKey = `trading_state_${user.email}`;
+        const localState = localStorage.getItem(stateKey);
         let loadedState = null;
         
         if (localState) {
@@ -250,20 +289,11 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
           }
         }
         
-        if (!loadedState) {
-          try {
-            loadedState = await loadState();
-          } catch (e) {
-            console.error('Error loading state from API:', e);
-          }
-        }
-        
         if (loadedState) {
           setTradingState(loadedState);
         } else {
-          // Get initial balance from questionnaire data
-          const questionnaireData = JSON.parse(localStorage.getItem('questionnaireAnswers') || '{}');
-          const initialEquity = questionnaireData.accountEquity || tradingPlan.userProfile.accountEquity || 100000;
+          // Get initial balance from trading plan
+          const initialEquity = tradingPlan.userProfile.accountEquity || 100000;
           
           const initialState: TradingState = {
             initialEquity,
@@ -271,8 +301,8 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             trades: [],
             openPositions: [],
             riskSettings: {
-              riskPerTrade: tradingPlan.riskParameters?.baseTradeRisk ? (tradingPlan.riskParameters.baseTradeRisk / initialEquity) * 100 : 1,
-              dailyLossLimit: tradingPlan.riskParameters?.maxDailyRisk ? (tradingPlan.riskParameters.maxDailyRisk / initialEquity) * 100 : 5,
+              riskPerTrade: parseFloat(tradingPlan.riskParameters?.baseTradeRiskPct?.replace('%', '') || '1'),
+              dailyLossLimit: parseFloat(tradingPlan.riskParameters?.maxDailyRiskPct?.replace('%', '') || '5'),
               consecutiveLossesLimit: 3,
             },
             performanceMetrics: {
@@ -299,33 +329,35 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
           };
           setTradingState(initialState);
           // Save initial state to localStorage
-          localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(initialState));
+          localStorage.setItem(stateKey, JSON.stringify(initialState));
         }
       }
     };
     initState();
-  }, [user, tradingPlan, currentAccount]);
+  }, [user?.email, tradingPlan, currentAccount]);
 
   // Save trading state to localStorage whenever it changes
   useEffect(() => {
-    if (tradingState && user) {
-      localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(tradingState));
+    if (tradingState && user?.email) {
+      const stateKey = `trading_state_${user.email}`;
+      localStorage.setItem(stateKey, JSON.stringify(tradingState));
     }
-  }, [tradingState, user]);
+  }, [tradingState, user?.email]);
 
-  if (!tradingPlan || !tradingPlan.userProfile || !tradingPlan.riskParameters) {
+  // Check if user needs to complete setup
+  if (!user?.setupComplete || !tradingPlan || !tradingPlan.userProfile || !tradingPlan.riskParameters) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center font-inter">
         <FuturisticBackground />
         <FuturisticCursor />
         <div className="relative z-10 text-center">
-          <div className="text-blue-400 text-xl animate-pulse mb-4">Incomplete Trading Plan</div>
-          <p className="text-gray-400 mb-4">Your trading plan is not fully configured. Please complete the setup process.</p>
+          <div className="text-blue-400 text-xl animate-pulse mb-4">Setting Up Your Dashboard</div>
+          <p className="text-gray-400 mb-4">Please complete your account setup to access the dashboard.</p>
           <button
-            onClick={() => navigate('/questionnaire')}
+            onClick={() => navigate('/signup')}
             className="px-6 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all"
           >
-            Go to Setup
+            Complete Setup
           </button>
         </div>
       </div>
@@ -339,23 +371,6 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
         <FuturisticCursor />
         <div className="relative z-10 text-center">
           <div className="text-blue-400 text-xl animate-pulse mb-4">Loading User...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user.setupComplete) {
-    const message = user.membershipTier === 'kickstarter'
-      ? "Your Kickstarter plan is awaiting approval. You will be notified once your account is active."
-      : "Please complete the setup process to access your dashboard.";
-
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center font-inter">
-        <FuturisticBackground />
-        <FuturisticCursor />
-        <div className="relative z-10 text-center">
-          <div className="text-blue-400 text-xl animate-pulse mb-4">Awaiting Access</div>
-          <p className="text-gray-400">{message}</p>
         </div>
       </div>
     );
@@ -433,23 +448,42 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             <p className="text-gray-400">
               Your {user.membershipTier.charAt(0).toUpperCase() + user.membershipTier.slice(1)} Dashboard
             </p>
+            
             {/* Display questionnaire data */}
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
+            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm max-w-4xl mx-auto">
+              <div className="bg-gray-800/50 rounded-lg p-3">
+                <span className="text-gray-400">Prop Firm:</span>
+                <span className="text-white ml-2 font-semibold">{user.tradingData?.propFirm || 'Not Set'}</span>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
+                <span className="text-gray-400">Account Type:</span>
+                <span className="text-white ml-2 font-semibold">{user.tradingData?.accountType || 'Not Set'}</span>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
+                <span className="text-gray-400">Account Size:</span>
+                <span className="text-white ml-2 font-semibold">
+                  {user.tradingData?.accountSize ? `$${parseInt(user.tradingData.accountSize).toLocaleString()}` : 'Not Set'}
+                </span>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
                 <span className="text-gray-400">Experience:</span>
-                <span className="text-white ml-2 capitalize">{tradingPlan.userProfile.experience}</span>
+                <span className="text-white ml-2 font-semibold capitalize">{user.tradingData?.tradingExperience || 'Not Set'}</span>
               </div>
-              <div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
                 <span className="text-gray-400">Trades/Day:</span>
-                <span className="text-white ml-2">{tradingPlan.userProfile.tradesPerDay}</span>
+                <span className="text-white ml-2 font-semibold">{user.tradingData?.tradesPerDay || 'Not Set'}</span>
               </div>
-              <div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
+                <span className="text-gray-400">Risk/Trade:</span>
+                <span className="text-white ml-2 font-semibold">{user.tradingData?.riskPerTrade || 'Not Set'}%</span>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
+                <span className="text-gray-400">Risk:Reward:</span>
+                <span className="text-white ml-2 font-semibold">1:{user.tradingData?.riskRewardRatio || 'Not Set'}</span>
+              </div>
+              <div className="bg-gray-800/50 rounded-lg p-3">
                 <span className="text-gray-400">Session:</span>
-                <span className="text-white ml-2 capitalize">{tradingPlan.userProfile.tradingSession}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">Account:</span>
-                <span className="text-white ml-2">{tradingPlan.userProfile.hasAccount === 'yes' ? 'Existing' : 'New'}</span>
+                <span className="text-white ml-2 font-semibold capitalize">{user.tradingData?.tradingSession || 'Not Set'}</span>
               </div>
             </div>
           </div>
@@ -568,7 +602,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
       setTradingState(finalState);
       
       // Save to localStorage immediately
-      localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(finalState));
+      localStorage.setItem(`trading_state_${user.email}`, JSON.stringify(finalState));
 
       if (hasProAccess) {
         handleTabClick('ai-coach');

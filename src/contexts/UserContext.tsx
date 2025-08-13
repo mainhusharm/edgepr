@@ -12,6 +12,19 @@ export interface User {
   setupComplete: boolean;
   journalLink?: string;
   token?: string;
+  tradingData?: {
+    propFirm: string;
+    accountType: string;
+    accountSize: string;
+    riskPerTrade: string;
+    riskRewardRatio: string;
+    tradesPerDay: string;
+    tradingExperience: string;
+    tradingSession: string;
+    cryptoAssets: string[];
+    forexAssets: string[];
+    hasAccount: string;
+  };
 }
 
 interface UserContextType {
@@ -25,7 +38,7 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const storedUser = localStorage.getItem('user');
+    const storedUser = localStorage.getItem('current_user');
     const storedToken = localStorage.getItem('token');
     if (storedUser && storedToken) {
       const parsedUser = JSON.parse(storedUser);
@@ -64,8 +77,9 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
 
     const finalUserData = { ...updatedUserData, membershipTier: plan, isAuthenticated: true, token };
 
-    // Always use localStorage to persist data
-    localStorage.setItem('user', JSON.stringify(finalUserData));
+    // Store user data with email as key for persistence
+    localStorage.setItem('current_user', JSON.stringify(finalUserData));
+    localStorage.setItem(`user_profile_${userData.email}`, JSON.stringify(finalUserData));
     localStorage.setItem('token', token);
     localStorage.setItem('access_token', token);
     
@@ -74,9 +88,10 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    // Don't remove user data, just remove authentication
+    // Remove authentication but keep user data for persistence
     localStorage.removeItem('token');
     localStorage.removeItem('access_token');
+    localStorage.removeItem('current_user');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
   };

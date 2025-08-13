@@ -2,31 +2,52 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { TrendingUp, ArrowLeft, Eye, EyeOff, AlertCircle, CheckCircle, User, Mail, Lock } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
+import { useTradingPlan } from '../contexts/TradingPlanContext';
+import { propFirms } from '../data/propFirms';
 import Header from './Header';
 
 const SignUp = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { setUser } = useUser();
+  const { updateTradingPlan, updatePropFirm, updateAccountConfig, updateRiskConfig } = useTradingPlan();
+  
+  // Get selected plan from location state or default
+  const selectedPlan = location.state?.selectedPlan || {
+    name: 'Professional',
+    price: 99,
+    period: 'month'
+  };
+
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    // Trading questionnaire data
+    propFirm: '',
+    accountType: '',
+    accountSize: '',
+    riskPerTrade: '1',
+    riskRewardRatio: '2',
+    tradesPerDay: '1-2',
+    tradingExperience: 'beginner',
+    tradingSession: 'any',
+    cryptoAssets: [] as string[],
+    forexAssets: [] as string[],
+    hasAccount: 'no'
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const { setUser } = useUser();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [currentStep, setCurrentStep] = useState(1);
 
-  // Get selected plan from location state
-  const selectedPlan = location.state?.selectedPlan || {
-    name: 'Professional',
-    price: 99,
-    period: 'month'
-  };
+  const propFirmOptions = propFirms.map(firm => ({ value: firm.name, label: firm.name }));
+  const cryptoOptions = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "MATIC", "LTC"];
+  const forexOptions = ["EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDUSD", "USDCHF", "NZDUSD", "XAUUSD"];
 
   const validateForm = () => {
     if (!formData.firstName.trim()) {
@@ -47,7 +68,69 @@ const SignUp = () => {
     if (!agreedToTerms) {
       return 'Please agree to the Terms of Service and Privacy Policy';
     }
+    
+    // Validate trading questionnaire data
+    if (currentStep === 2) {
+      if (!formData.propFirm) return 'Please select a prop firm';
+      if (!formData.accountType) return 'Please select an account type';
+      if (!formData.accountSize) return 'Please enter account size';
+    }
+    
     return null;
+  };
+
+  const generateTradingPlan = () => {
+    const selectedPropFirm = propFirms.find(f => f.name === formData.propFirm);
+    if (!selectedPropFirm) return null;
+
+    const accountEquity = parseFloat(formData.accountSize) || 10000;
+    const riskPerTrade = parseFloat(formData.riskPerTrade);
+    const riskRewardRatio = parseFloat(formData.riskRewardRatio);
+    
+    // Calculate risk parameters
+    const maxDailyRisk = accountEquity * 0.05; // 5% max daily risk
+    const baseTradeRisk = accountEquity * (riskPerTrade / 100);
+    
+    // Generate trades based on user preferences
+    const numTrades = formData.tradesPerDay === '1-2' ? 2 : 
+                     formData.tradesPerDay === '3-5' ? 4 : 3;
+    
+    const trades = Array.from({ length: numTrades }, (_, i) => ({
+      trade: `trade-${i + 1}`,
+      asset: formData.forexAssets[i % formData.forexAssets.length] || 'EURUSD',
+      lossLimit: baseTradeRisk,
+      profitTarget: baseTradeRisk * riskRewardRatio,
+      riskRewardRatio: `1:${riskRewardRatio}`
+    }));
+
+    const tradingPlan = {
+      userProfile: {
+        initialBalance: accountEquity,
+        accountEquity,
+        tradesPerDay: formData.tradesPerDay,
+        tradingSession: formData.tradingSession,
+        cryptoAssets: formData.cryptoAssets,
+        forexAssets: formData.forexAssets,
+        hasAccount: formData.hasAccount,
+        experience: formData.tradingExperience,
+      },
+      riskParameters: {
+        maxDailyRisk,
+        maxDailyRiskPct: '5%',
+        baseTradeRisk,
+        baseTradeRiskPct: `${riskPerTrade}%`,
+        minRiskReward: `1:${riskRewardRatio}`
+      },
+      trades,
+      propFirmCompliance: {
+        dailyLossLimit: selectedPropFirm.dailyLossLimit,
+        totalDrawdownLimit: selectedPropFirm.maximumLoss,
+        profitTarget: selectedPropFirm.profitTargets,
+        consistencyRule: "Maintain steady performance"
+      }
+    };
+
+    return { tradingPlan, selectedPropFirm };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,19 +143,45 @@ const SignUp = () => {
       return;
     }
 
+    if (currentStep === 1) {
+      setCurrentStep(2);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      // Generate trading plan from questionnaire data
+      const planData = generateTradingPlan();
+      if (!planData) {
+        throw new Error('Failed to generate trading plan');
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: `${formData.firstName} ${formData.lastName}`,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           email: formData.email,
           password: formData.password,
-          plan_type: selectedPlan.name,
+          plan_type: selectedPlan.name.toLowerCase(),
+          // Include trading questionnaire data
+          tradingData: {
+            propFirm: formData.propFirm,
+            accountType: formData.accountType,
+            accountSize: formData.accountSize,
+            riskPerTrade: formData.riskPerTrade,
+            riskRewardRatio: formData.riskRewardRatio,
+            tradesPerDay: formData.tradesPerDay,
+            tradingExperience: formData.tradingExperience,
+            tradingSession: formData.tradingSession,
+            cryptoAssets: formData.cryptoAssets,
+            forexAssets: formData.forexAssets,
+            hasAccount: formData.hasAccount
+          }
         }),
       });
 
@@ -84,6 +193,19 @@ const SignUp = () => {
       const data = await response.json();
       localStorage.setItem('access_token', data.access_token);
 
+      // Store trading plan and prop firm data
+      updateTradingPlan(planData.tradingPlan);
+      updatePropFirm(planData.selectedPropFirm);
+      updateAccountConfig({ 
+        size: parseFloat(formData.accountSize), 
+        challengeType: formData.accountType 
+      });
+      updateRiskConfig({
+        riskPercentage: parseFloat(formData.riskPerTrade),
+        riskRewardRatio: parseFloat(formData.riskRewardRatio),
+        tradingExperience: formData.tradingExperience
+      });
+
       const userData = {
         id: '', // This will be set from the decoded token on the server
         name: `${formData.firstName} ${formData.lastName}`,
@@ -92,12 +214,27 @@ const SignUp = () => {
         accountType: 'personal' as const,
         riskTolerance: 'moderate' as const,
         isAuthenticated: true,
-        setupComplete: false,
+        setupComplete: true, // Setup is complete after questionnaire
         selectedPlan,
+        tradingData: {
+          propFirm: formData.propFirm,
+          accountType: formData.accountType,
+          accountSize: formData.accountSize,
+          riskPerTrade: formData.riskPerTrade,
+          riskRewardRatio: formData.riskRewardRatio,
+          tradesPerDay: formData.tradesPerDay,
+          tradingExperience: formData.tradingExperience,
+          tradingSession: formData.tradingSession,
+          cryptoAssets: formData.cryptoAssets,
+          forexAssets: formData.forexAssets,
+          hasAccount: formData.hasAccount
+        }
       };
 
       setUser(userData);
       localStorage.setItem('user_data', JSON.stringify(userData));
+      localStorage.setItem('trading_plan_data', JSON.stringify(planData.tradingPlan));
+      localStorage.setItem('prop_firm_data', JSON.stringify(planData.selectedPropFirm));
 
       // Also store in registered users list for admin dashboard
       const existingUsers = JSON.parse(localStorage.getItem('registered_users') || '[]');
@@ -107,13 +244,8 @@ const SignUp = () => {
       // Dispatch event to notify admin dashboard
       window.dispatchEvent(new CustomEvent('userRegistered', { detail: userData }));
 
-      // Navigate to setup flow
-      navigate('/payment', {
-        state: {
-          newUser: true,
-          selectedPlan,
-        },
-      });
+      // Navigate directly to dashboard since setup is complete
+      navigate('/dashboard');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -121,9 +253,13 @@ const SignUp = () => {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (error) setError(''); // Clear error when user starts typing
+  };
+
+  const getSelectedPropFirm = () => {
+    return propFirms.find(f => f.name === formData.propFirm);
   };
 
   return (
@@ -143,8 +279,16 @@ const SignUp = () => {
             <span className="text-2xl font-bold text-white">TraderEdge Pro</span>
           </div>
 
-          <h2 className="text-3xl font-bold text-white mb-2">Create Your Account</h2>
-          <p className="text-gray-400">Start your journey to funded trading success</p>
+          <h2 className="text-3xl font-bold text-white mb-2">
+            {currentStep === 1 ? 'Create Your Account' : 'Trading Setup'}
+          </h2>
+          <p className="text-gray-400">
+            {currentStep === 1 ? 'Start your journey to funded trading success' : 'Configure your trading preferences'}
+          </p>
+          <div className="flex justify-center space-x-2 mt-4">
+            <div className={`w-3 h-3 rounded-full ${currentStep >= 1 ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
+            <div className={`w-3 h-3 rounded-full ${currentStep >= 2 ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
+          </div>
         </div>
 
         {/* Selected Plan Summary */}
@@ -166,7 +310,8 @@ const SignUp = () => {
             </div>
           )}
 
-          <div className="space-y-6">
+          {currentStep === 1 && (
+            <div className="space-y-6">
             {/* Name Fields */}
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -281,6 +426,188 @@ const SignUp = () => {
                 <a href="/privacy-policy" target="_blank" className="text-blue-400 hover:text-blue-300">Privacy Policy</a>
               </label>
             </div>
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div className="space-y-6">
+              <h3 className="text-xl font-bold text-white mb-4">Trading Preferences</h3>
+              
+              {/* Prop Firm Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Select Prop Firm</label>
+                <select
+                  value={formData.propFirm}
+                  onChange={(e) => {
+                    handleInputChange('propFirm', e.target.value);
+                    // Reset account type when prop firm changes
+                    handleInputChange('accountType', '');
+                  }}
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select Prop Firm</option>
+                  {propFirmOptions.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Account Type */}
+              {formData.propFirm && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Account Type</label>
+                  <select
+                    value={formData.accountType}
+                    onChange={(e) => handleInputChange('accountType', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select Account Type</option>
+                    {getSelectedPropFirm()?.accountTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Account Size */}
+              {formData.accountType && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Account Size</label>
+                  <select
+                    value={formData.accountSize}
+                    onChange={(e) => handleInputChange('accountSize', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select Account Size</option>
+                    {getSelectedPropFirm()?.accountSizes.map(size => (
+                      <option key={size} value={size}>${size.toLocaleString()}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Risk Parameters */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Risk Per Trade (%)</label>
+                  <select
+                    value={formData.riskPerTrade}
+                    onChange={(e) => handleInputChange('riskPerTrade', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="0.5">0.5% (Conservative)</option>
+                    <option value="1">1% (Recommended)</option>
+                    <option value="1.5">1.5% (Moderate)</option>
+                    <option value="2">2% (Aggressive)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Risk:Reward Ratio</label>
+                  <select
+                    value={formData.riskRewardRatio}
+                    onChange={(e) => handleInputChange('riskRewardRatio', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="1">1:1</option>
+                    <option value="2">1:2 (Recommended)</option>
+                    <option value="3">1:3</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Trading Preferences */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Trades Per Day</label>
+                  <select
+                    value={formData.tradesPerDay}
+                    onChange={(e) => handleInputChange('tradesPerDay', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="1-2">1-2 (Recommended)</option>
+                    <option value="3-5">3-5</option>
+                    <option value="6-10">6-10</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Experience Level</label>
+                  <select
+                    value={formData.tradingExperience}
+                    onChange={(e) => handleInputChange('tradingExperience', e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="beginner">Beginner</option>
+                    <option value="intermediate">Intermediate</option>
+                    <option value="advanced">Advanced</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Trading Session */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Preferred Trading Session</label>
+                <select
+                  value={formData.tradingSession}
+                  onChange={(e) => handleInputChange('tradingSession', e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="any">Any Session</option>
+                  <option value="asian">Asian Session</option>
+                  <option value="european">European Session</option>
+                  <option value="us">US Session</option>
+                </select>
+              </div>
+
+              {/* Asset Preferences */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Preferred Forex Assets</label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                  {forexOptions.map(asset => (
+                    <label key={asset} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.forexAssets.includes(asset)}
+                        onChange={(e) => {
+                          const newAssets = e.target.checked
+                            ? [...formData.forexAssets, asset]
+                            : formData.forexAssets.filter(a => a !== asset);
+                          handleInputChange('forexAssets', newAssets);
+                        }}
+                        className="rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-white text-sm">{asset}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Crypto Assets */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Preferred Crypto Assets</label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                  {cryptoOptions.map(asset => (
+                    <label key={asset} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.cryptoAssets.includes(asset)}
+                        onChange={(e) => {
+                          const newAssets = e.target.checked
+                            ? [...formData.cryptoAssets, asset]
+                            : formData.cryptoAssets.filter(a => a !== asset);
+                          handleInputChange('cryptoAssets', newAssets);
+                        }}
+                        className="rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-white text-sm">{asset}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
             {/* Submit Button */}
             <button
@@ -291,17 +618,28 @@ const SignUp = () => {
               {isLoading ? (
                 <>
                   <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Creating Account...
+                  {currentStep === 1 ? 'Creating Account...' : 'Setting Up Dashboard...'}
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-5 h-5 mr-2" />
-                  Create Account
+                  {currentStep === 1 ? 'Continue to Trading Setup' : 'Complete Setup'}
                 </>
               )}
             </button>
-          </div>
         </form>
+
+        {/* Back button for step 2 */}
+        {currentStep === 2 && (
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setCurrentStep(1)}
+              className="text-gray-400 hover:text-blue-400 transition-colors text-sm"
+            >
+              ← Back to Account Details
+            </button>
+          </div>
+        )}
 
         {/* Sign In Link */}
         <div className="text-center mt-6">

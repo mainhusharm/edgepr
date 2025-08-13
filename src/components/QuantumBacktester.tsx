@@ -1,18 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Calculator, History, DollarSign, Target, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Calculator, History, DollarSign, Target, AlertTriangle, MessageCircle } from 'lucide-react';
 
 interface BacktestTrade {
   id: string;
   symbol: string;
   direction: 'BUY' | 'SELL';
   entryPrice: number;
+  exitPrice: number;
   stopLoss: number;
   targetPrice: number;
   lotSize: number;
   profitLoss: number;
+  pips: number;
   timestamp: Date;
   riskReward: number;
-  pips: number;
+  outcome: 'WIN' | 'LOSS';
+  calculationDetails: {
+    riskAmount: number;
+    rewardAmount: number;
+    pipValue: number;
+    totalRisk: number;
+    totalReward: number;
+  };
 }
 
 const QuantumBacktester: React.FC = () => {
@@ -30,7 +39,10 @@ const QuantumBacktester: React.FC = () => {
     rewardAmount: 0,
     riskReward: 0,
     pips: 0,
-    profitLoss: 0
+    profitLoss: 0,
+    pipValue: 0,
+    totalRisk: 0,
+    totalReward: 0
   });
   
   const [backtestHistory, setBacktestHistory] = useState<BacktestTrade[]>([]);
@@ -61,8 +73,14 @@ const QuantumBacktester: React.FC = () => {
     const lots = parseFloat(tradeData.lotSize);
 
     if (entry && sl && target && lots) {
-      const pipSize = tradeData.symbol.includes('JPY') ? 0.01 : 0.0001;
-      const pipValue = tradeData.symbol.includes('JPY') ? 9.09 : 10; // Approximate pip values
+      // Determine pip size and value based on currency pair
+      const isJPYPair = tradeData.symbol.includes('JPY');
+      const pipSize = isJPYPair ? 0.01 : 0.0001;
+      
+      // Calculate pip value (simplified but accurate)
+      // For standard lot (100,000 units), 1 pip = $10 for most pairs, $9.09 for JPY pairs
+      const pipValuePerLot = isJPYPair ? 9.09 : 10;
+      const pipValue = pipValuePerLot * lots;
       
       let riskPips, rewardPips, profitLoss;
       
@@ -76,8 +94,8 @@ const QuantumBacktester: React.FC = () => {
         profitLoss = (entry - target) * lots * 100000;
       }
       
-      const riskAmount = Math.abs(riskPips * pipValue * lots);
-      const rewardAmount = Math.abs(rewardPips * pipValue * lots);
+      const riskAmount = Math.abs(riskPips * pipValue);
+      const rewardAmount = Math.abs(rewardPips * pipValue);
       const riskReward = riskPips > 0 ? rewardPips / riskPips : 0;
       
       setCalculation({
@@ -85,7 +103,10 @@ const QuantumBacktester: React.FC = () => {
         rewardAmount,
         riskReward,
         pips: Math.abs(rewardPips),
-        profitLoss
+        profitLoss,
+        pipValue,
+        totalRisk: riskAmount,
+        totalReward: rewardAmount
       });
       
       setShowCalculation(true);
@@ -105,19 +126,29 @@ const QuantumBacktester: React.FC = () => {
     }
 
     const finalPnL = outcome === 'WIN' ? calculation.rewardAmount : -calculation.riskAmount;
+    const exitPrice = outcome === 'WIN' ? parseFloat(tradeData.targetPrice) : parseFloat(tradeData.stopLoss);
     
     const newTrade: BacktestTrade = {
       id: Date.now().toString(),
       symbol: tradeData.symbol,
       direction: tradeData.direction,
       entryPrice: parseFloat(tradeData.entryPrice),
+      exitPrice,
       stopLoss: parseFloat(tradeData.stopLoss),
       targetPrice: parseFloat(tradeData.targetPrice),
       lotSize: parseFloat(tradeData.lotSize),
       profitLoss: finalPnL,
+      pips: calculation.pips,
       timestamp: new Date(),
       riskReward: calculation.riskReward,
-      pips: calculation.pips
+      outcome,
+      calculationDetails: {
+        riskAmount: calculation.riskAmount,
+        rewardAmount: calculation.rewardAmount,
+        pipValue: calculation.pipValue,
+        totalRisk: calculation.totalRisk,
+        totalReward: calculation.totalReward
+      }
     };
 
     setBacktestHistory(prev => [newTrade, ...prev]);
@@ -145,10 +176,10 @@ const QuantumBacktester: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="glass-panel">
+      <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-2">Quantum Backtester</h2>
+            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">Quantum Backtester</h2>
             <p className="text-gray-400">Test your trading strategies with precise calculations</p>
           </div>
           <div className="flex items-center space-x-4">
@@ -168,7 +199,7 @@ const QuantumBacktester: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Trade Setup Panel */}
-        <div className="glass-panel">
+        <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8">
           <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
             <Calculator className="w-5 h-5 mr-2 text-blue-400" />
             Trade Setup
@@ -181,15 +212,16 @@ const QuantumBacktester: React.FC = () => {
                 <select
                   value={tradeData.symbol}
                   onChange={(e) => handleInputChange('symbol', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
                 >
                   <option value="EURUSD">EUR/USD</option>
                   <option value="GBPUSD">GBP/USD</option>
                   <option value="USDJPY">USD/JPY</option>
-                  <option value="XAUUSD">XAU/USD</option>
+                  <option value="XAUUSD">XAU/USD (Gold)</option>
                   <option value="AUDUSD">AUD/USD</option>
                   <option value="USDCAD">USD/CAD</option>
                   <option value="NZDUSD">NZD/USD</option>
+                  <option value="USDCHF">USD/CHF</option>
                 </select>
               </div>
               
@@ -197,10 +229,11 @@ const QuantumBacktester: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-300 mb-2">Direction</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
+                    type="button"
                     onClick={() => handleInputChange('direction', 'BUY')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
                       tradeData.direction === 'BUY'
-                        ? 'bg-green-600 text-white'
+                        ? 'bg-green-600 text-white shadow-lg shadow-green-500/30'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
@@ -208,10 +241,11 @@ const QuantumBacktester: React.FC = () => {
                     BUY
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleInputChange('direction', 'SELL')}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
                       tradeData.direction === 'SELL'
-                        ? 'bg-red-600 text-white'
+                        ? 'bg-red-600 text-white shadow-lg shadow-red-500/30'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                     }`}
                   >
@@ -230,7 +264,7 @@ const QuantumBacktester: React.FC = () => {
                   step="0.00001"
                   value={tradeData.entryPrice}
                   onChange={(e) => handleInputChange('entryPrice', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
                   placeholder="1.08500"
                 />
               </div>
@@ -242,7 +276,7 @@ const QuantumBacktester: React.FC = () => {
                   step="0.01"
                   value={tradeData.lotSize}
                   onChange={(e) => handleInputChange('lotSize', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 transition-all"
                   placeholder="0.1"
                 />
               </div>
@@ -256,7 +290,7 @@ const QuantumBacktester: React.FC = () => {
                   step="0.00001"
                   value={tradeData.stopLoss}
                   onChange={(e) => handleInputChange('stopLoss', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 transition-all"
                   placeholder="1.08300"
                 />
               </div>
@@ -268,35 +302,59 @@ const QuantumBacktester: React.FC = () => {
                   step="0.00001"
                   value={tradeData.targetPrice}
                   onChange={(e) => handleInputChange('targetPrice', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 transition-all"
                   placeholder="1.08700"
                 />
               </div>
             </div>
 
-            {/* Calculation Display */}
+            {/* Real-time Calculation Display */}
             {showCalculation && (
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-blue-500/30">
-                <h4 className="text-white font-semibold mb-3 flex items-center">
-                  <Target className="w-4 h-4 mr-2 text-blue-400" />
-                  Trade Calculation
+              <div className="bg-gray-800/50 rounded-xl p-6 border border-cyan-500/30">
+                <h4 className="text-white font-semibold mb-4 flex items-center">
+                  <Target className="w-4 h-4 mr-2 text-cyan-400" />
+                  Live Trade Calculation
                 </h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="bg-red-600/20 rounded-lg p-3">
-                    <div className="text-red-400 font-medium">Risk Amount</div>
-                    <div className="text-white text-lg font-bold">${calculation.riskAmount.toFixed(2)}</div>
+                  <div className="bg-red-600/20 rounded-lg p-4 border border-red-500/30">
+                    <div className="text-red-400 font-medium mb-1">Risk Amount</div>
+                    <div className="text-white text-xl font-bold">${calculation.riskAmount.toFixed(2)}</div>
+                    <div className="text-gray-400 text-xs mt-1">
+                      {Math.abs((parseFloat(tradeData.entryPrice) - parseFloat(tradeData.stopLoss)) / (tradeData.symbol.includes('JPY') ? 0.01 : 0.0001)).toFixed(0)} pips
+                    </div>
                   </div>
-                  <div className="bg-green-600/20 rounded-lg p-3">
-                    <div className="text-green-400 font-medium">Reward Amount</div>
-                    <div className="text-white text-lg font-bold">${calculation.rewardAmount.toFixed(2)}</div>
+                  <div className="bg-green-600/20 rounded-lg p-4 border border-green-500/30">
+                    <div className="text-green-400 font-medium mb-1">Reward Amount</div>
+                    <div className="text-white text-xl font-bold">${calculation.rewardAmount.toFixed(2)}</div>
+                    <div className="text-gray-400 text-xs mt-1">
+                      {Math.abs((parseFloat(tradeData.targetPrice) - parseFloat(tradeData.entryPrice)) / (tradeData.symbol.includes('JPY') ? 0.01 : 0.0001)).toFixed(0)} pips
+                    </div>
                   </div>
-                  <div className="bg-blue-600/20 rounded-lg p-3">
-                    <div className="text-blue-400 font-medium">Risk:Reward</div>
-                    <div className="text-white text-lg font-bold">1:{calculation.riskReward.toFixed(2)}</div>
+                  <div className="bg-blue-600/20 rounded-lg p-4 border border-blue-500/30">
+                    <div className="text-blue-400 font-medium mb-1">Risk:Reward Ratio</div>
+                    <div className="text-white text-xl font-bold">1:{calculation.riskReward.toFixed(2)}</div>
+                    <div className="text-gray-400 text-xs mt-1">
+                      {calculation.riskReward >= 2 ? 'Good' : calculation.riskReward >= 1.5 ? 'Fair' : 'Poor'} ratio
+                    </div>
                   </div>
-                  <div className="bg-purple-600/20 rounded-lg p-3">
-                    <div className="text-purple-400 font-medium">Pips</div>
-                    <div className="text-white text-lg font-bold">{calculation.pips.toFixed(1)}</div>
+                  <div className="bg-purple-600/20 rounded-lg p-4 border border-purple-500/30">
+                    <div className="text-purple-400 font-medium mb-1">Pip Value</div>
+                    <div className="text-white text-xl font-bold">${calculation.pipValue.toFixed(2)}</div>
+                    <div className="text-gray-400 text-xs mt-1">Per pip movement</div>
+                  </div>
+                </div>
+                
+                {/* Detailed Breakdown */}
+                <div className="mt-4 p-4 bg-gray-700/30 rounded-lg">
+                  <div className="text-sm text-gray-300">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <strong>If Target Hit:</strong> +${calculation.rewardAmount.toFixed(2)}
+                      </div>
+                      <div>
+                        <strong>If Stop Loss Hit:</strong> -${calculation.riskAmount.toFixed(2)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -305,28 +363,30 @@ const QuantumBacktester: React.FC = () => {
             {/* Execute Buttons */}
             <div className="grid grid-cols-2 gap-4">
               <button
+                type="button"
                 onClick={() => executeTrade('WIN')}
                 disabled={!showCalculation}
-                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2"
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-all flex items-center justify-center space-x-2 shadow-lg"
               >
                 <TrendingUp className="w-4 h-4" />
-                <span>Execute WIN</span>
+                <span>Execute WIN (+${calculation.rewardAmount.toFixed(2)})</span>
               </button>
               
               <button
+                type="button"
                 onClick={() => executeTrade('LOSS')}
                 disabled={!showCalculation}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2"
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-3 rounded-lg font-semibold transition-all flex items-center justify-center space-x-2 shadow-lg"
               >
                 <TrendingDown className="w-4 h-4" />
-                <span>Execute LOSS</span>
+                <span>Execute LOSS (-${calculation.riskAmount.toFixed(2)})</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Statistics Panel */}
-        <div className="glass-panel">
+        <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-semibold text-white flex items-center">
               <History className="w-5 h-5 mr-2 text-purple-400" />
@@ -335,7 +395,7 @@ const QuantumBacktester: React.FC = () => {
             {backtestHistory.length > 0 && (
               <button
                 onClick={clearHistory}
-                className="text-red-400 hover:text-red-300 text-sm"
+                className="text-red-400 hover:text-red-300 text-sm transition-colors"
               >
                 Clear History
               </button>
@@ -343,25 +403,25 @@ const QuantumBacktester: React.FC = () => {
           </div>
           
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-gray-800/50 rounded-lg p-4 text-center">
+            <div className="bg-gray-800/50 rounded-lg p-4 text-center border border-gray-600/30">
               <div className="text-2xl font-bold text-white">{totalTrades}</div>
               <div className="text-xs text-gray-400">Total Trades</div>
             </div>
-            <div className="bg-gray-800/50 rounded-lg p-4 text-center">
+            <div className="bg-gray-800/50 rounded-lg p-4 text-center border border-gray-600/30">
               <div className="text-2xl font-bold text-blue-400">{winRate.toFixed(1)}%</div>
               <div className="text-xs text-gray-400">Win Rate</div>
             </div>
-            <div className="bg-gray-800/50 rounded-lg p-4 text-center">
+            <div className="bg-gray-800/50 rounded-lg p-4 text-center border border-gray-600/30">
               <div className="text-2xl font-bold text-green-400">{winningTrades}</div>
               <div className="text-xs text-gray-400">Wins</div>
             </div>
-            <div className="bg-gray-800/50 rounded-lg p-4 text-center">
+            <div className="bg-gray-800/50 rounded-lg p-4 text-center border border-gray-600/30">
               <div className="text-2xl font-bold text-red-400">{totalTrades - winningTrades}</div>
               <div className="text-xs text-gray-400">Losses</div>
             </div>
           </div>
 
-          <div className="bg-gray-800/50 rounded-lg p-4">
+          <div className="bg-gray-800/50 rounded-lg p-6 border border-gray-600/30">
             <div className="text-center">
               <div className={`text-3xl font-bold ${totalPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 ${totalPnL.toFixed(2)}
@@ -373,13 +433,13 @@ const QuantumBacktester: React.FC = () => {
       </div>
 
       {/* Backtest History Chat */}
-      <div className="glass-panel">
+      <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8">
         <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
-          <History className="w-5 h-5 mr-2 text-cyan-400" />
-          Backtest History ({backtestHistory.length} trades)
+          <MessageCircle className="w-5 h-5 mr-2 text-cyan-400" />
+          Backtest History Chat ({backtestHistory.length} trades)
         </h3>
         
-        <div className="space-y-3 max-h-96 overflow-y-auto futuristic-scrollbar">
+        <div className="space-y-4 max-h-96 overflow-y-auto futuristic-scrollbar">
           {backtestHistory.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <Calculator className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -390,17 +450,17 @@ const QuantumBacktester: React.FC = () => {
             backtestHistory.map(trade => (
               <div
                 key={trade.id}
-                className={`bg-gray-800/50 rounded-xl p-4 border-l-4 transition-all ${
+                className={`bg-gray-800/50 rounded-xl p-6 border-l-4 transition-all hover:bg-gray-700/30 ${
                   trade.profitLoss > 0 ? 'border-green-400' : 'border-red-400'
                 }`}
               >
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center space-x-3">
-                    <div className="text-xl">
+                    <div className="text-2xl">
                       {trade.profitLoss > 0 ? '✅' : '❌'}
                     </div>
                     <div>
-                      <div className={`text-lg font-bold ${
+                      <div className={`text-xl font-bold ${
                         trade.profitLoss > 0 ? 'text-green-400' : 'text-red-400'
                       }`}>
                         {trade.direction} {trade.symbol}
@@ -411,37 +471,54 @@ const QuantumBacktester: React.FC = () => {
                     </div>
                   </div>
                   <div className={`text-right ${trade.profitLoss > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    <div className="text-lg font-bold">
+                    <div className="text-xl font-bold">
                       {trade.profitLoss > 0 ? '+' : ''}${trade.profitLoss.toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-400">
-                      {trade.pips.toFixed(1)} pips
+                      {trade.pips.toFixed(1)} pips • {trade.outcome}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3 text-xs">
-                  <div className="bg-gray-700/50 rounded p-2 text-center">
+                <div className="grid grid-cols-4 gap-3 text-xs mb-4">
+                  <div className="bg-gray-700/50 rounded p-3 text-center border border-gray-600/30">
                     <div className="text-gray-400">Entry</div>
-                    <div className="text-white font-semibold">{trade.entryPrice}</div>
+                    <div className="text-cyan-400 font-semibold">{trade.entryPrice}</div>
                   </div>
-                  <div className="bg-gray-700/50 rounded p-2 text-center">
+                  <div className="bg-gray-700/50 rounded p-3 text-center border border-gray-600/30">
                     <div className="text-gray-400">Stop Loss</div>
                     <div className="text-red-400 font-semibold">{trade.stopLoss}</div>
                   </div>
-                  <div className="bg-gray-700/50 rounded p-2 text-center">
+                  <div className="bg-gray-700/50 rounded p-3 text-center border border-gray-600/30">
                     <div className="text-gray-400">Target</div>
                     <div className="text-green-400 font-semibold">{trade.targetPrice}</div>
                   </div>
-                  <div className="bg-gray-700/50 rounded p-2 text-center">
+                  <div className="bg-gray-700/50 rounded p-3 text-center border border-gray-600/30">
                     <div className="text-gray-400">Lot Size</div>
-                    <div className="text-blue-400 font-semibold">{trade.lotSize}</div>
+                    <div className="text-purple-400 font-semibold">{trade.lotSize}</div>
                   </div>
                 </div>
 
-                <div className="mt-3 text-xs text-gray-400">
-                  Risk:Reward 1:{trade.riskReward.toFixed(2)} • 
-                  {trade.profitLoss > 0 ? ' Target Hit' : ' Stop Loss Hit'}
+                {/* Detailed Calculation Breakdown */}
+                <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/20">
+                  <div className="text-xs text-gray-300 space-y-1">
+                    <div className="flex justify-between">
+                      <span>Risk Amount:</span>
+                      <span className="text-red-400">${trade.calculationDetails.riskAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Reward Amount:</span>
+                      <span className="text-green-400">${trade.calculationDetails.rewardAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pip Value:</span>
+                      <span className="text-blue-400">${trade.calculationDetails.pipValue.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Risk:Reward:</span>
+                      <span className="text-white">1:{trade.riskReward.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))

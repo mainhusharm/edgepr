@@ -187,31 +187,31 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" style={{ cursor: 'auto' }}>
-      <div className="bg-gray-900/95 backdrop-blur-lg rounded-2xl border border-cyan-500/30 max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900/95 backdrop-blur-lg rounded-2xl border border-cyan-500/30 max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-2xl shadow-cyan-500/20">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-cyan-500/30 bg-gray-800/50">
+        <div className="flex items-center justify-between p-6 border-b border-cyan-500/30 bg-gradient-to-r from-gray-800/70 to-gray-900/70">
           <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
             {editEntry ? 'Edit' : 'New'} Trading Journal Entry
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-cyan-400 transition-colors p-2 hover:bg-gray-700/50 rounded-lg"
+            className="text-gray-400 hover:text-cyan-400 transition-all p-2 hover:bg-gray-700/50 rounded-lg hover:shadow-lg hover:shadow-cyan-500/20"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-cyan-500/30 px-6 bg-gray-800/30">
+        <div className="flex border-b border-cyan-500/30 px-6 bg-gradient-to-r from-gray-800/30 to-gray-900/30">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-all duration-300 ${
+              className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-all duration-300 hover:bg-gray-700/30 ${
                 activeTab === tab.id
-                  ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10'
-                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:bg-gray-700/30'
+                  ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10 shadow-lg shadow-cyan-500/20'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300'
               }`}
             >
               {tab.icon}
@@ -221,7 +221,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh] bg-gray-900/50">
+        <div className="p-6 overflow-y-auto max-h-[60vh] bg-gradient-to-br from-gray-900/50 to-gray-800/50">
           {activeTab === 'details' && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -231,7 +231,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     type="datetime-local"
                     value={entry.dateTime}
                     onChange={(e) => handleInputChange('dateTime', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                   />
                 </div>
                 <div>
@@ -240,7 +240,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     type="text"
                     value={entry.symbol}
                     onChange={(e) => handleInputChange('symbol', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                     placeholder="EURUSD, AAPL, BTC/USD"
                   />
                 </div>
@@ -254,7 +254,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     step="0.00001"
                     value={entry.entryPrice}
                     onChange={(e) => handleInputChange('entryPrice', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                   />
                 </div>
                 <div>
@@ -264,7 +264,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     step="0.00001"
                     value={entry.exitPrice}
                     onChange={(e) => handleInputChange('exitPrice', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                   />
                 </div>
                 <div>
@@ -274,7 +274,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     step="0.01"
                     value={entry.positionSize}
                     onChange={(e) => handleInputChange('positionSize', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                   />
                 </div>
               </div>
@@ -285,7 +285,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                   <select
                     value={entry.direction}
                     onChange={(e) => handleInputChange('direction', e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50"
                   >
                     <option value="long">Long</option>
                     <option value="short">Short</option>
@@ -298,7 +298,7 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     step="0.00001"
                     value={entry.stopLoss}
                     onChange={(e) => handleInputChange('stopLoss', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-red-500 transition-all hover:border-red-500/50"
                   />
                 </div>
                 <div>
@@ -308,17 +308,17 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
                     step="0.00001"
                     value={entry.takeProfit}
                     onChange={(e) => handleInputChange('takeProfit', parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 transition-all"
+                    className="w-full px-3 py-2 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 transition-all hover:border-green-500/50"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-800/50 rounded-lg p-4 border border-cyan-500/20">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                <div className="bg-gray-800/50 rounded-lg p-4 border border-cyan-500/20 hover:border-cyan-500/40 transition-all">
                   <div className="text-sm text-gray-400 mb-1">Risk-Reward Ratio</div>
                   <div className="text-xl font-bold text-cyan-400">1:{entry.riskRewardRatio?.toFixed(2) || '0.00'}</div>
                 </div>
-                <div className="bg-gray-800/50 rounded-lg p-4 border border-cyan-500/20">
+                <div className="bg-gray-800/50 rounded-lg p-4 border border-cyan-500/20 hover:border-cyan-500/40 transition-all">
                   <div className="text-sm text-gray-400 mb-1">R-Multiple</div>
                   <div className={`text-xl font-bold ${(entry.rMultiple || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {entry.rMultiple?.toFixed(2) || '0.00'}R
@@ -665,16 +665,16 @@ const TradingJournalEntry: React.FC<TradingJournalEntryProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-6 border-t border-cyan-500/30 bg-gray-800/50">
+        <div className="flex justify-between items-center p-6 border-t border-cyan-500/30 bg-gradient-to-r from-gray-800/50 to-gray-900/50">
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-all border border-gray-600"
+            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-all border border-gray-600 hover:border-gray-500"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg transition-all shadow-lg"
+            className="flex items-center space-x-2 px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg transition-all shadow-lg hover:shadow-cyan-500/30"
           >
             <Save className="w-4 h-4" />
             <span>Save Entry</span>

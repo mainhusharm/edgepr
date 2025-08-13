@@ -24,10 +24,16 @@ const SignalsFeed: React.FC<SignalsFeedProps> = ({ onMarkAsTaken, onAddToJournal
   useEffect(() => {
     const loadSignals = () => {
       try {
-        // Load signals from localStorage (admin generated signals)
+        // Only load signals from admin dashboard - no prefilled signals
         const adminSignals = JSON.parse(localStorage.getItem('telegram_messages') || '[]');
         
-        // Convert telegram messages to Signal format
+        // Only show signals if they exist from admin
+        if (adminSignals.length === 0) {
+          setSignals([]);
+          return;
+        }
+
+        // Convert admin messages to Signal format
         const convertedSignals: Signal[] = adminSignals.map((msg: any) => {
           const lines = msg.text.split('\n');
           const pair = lines[0] || 'UNKNOWN';
@@ -465,8 +471,8 @@ const SignalsFeed: React.FC<SignalsFeedProps> = ({ onMarkAsTaken, onAddToJournal
           <div className="signals-grid">
             {activeTab === 'active' && signals.length === 0 && (
               <div className="text-center py-12 text-white">
-                <div className="text-lg font-semibold mb-2">Awaiting New Signals</div>
-                <div className="text-gray-400">The system is actively scanning the markets. Please check back shortly.</div>
+                <div className="text-lg font-semibold mb-2">No Active Signals</div>
+                <div className="text-gray-400">Signals will appear here when sent by the admin team.</div>
               </div>
             )}
             {activeTab === 'active' && signals.length > 0 && renderSignals(signals, 'active')}
