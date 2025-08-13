@@ -122,30 +122,47 @@ export const TradingPlanProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<PropFirmAccount[]>([]);
 
   useEffect(() => {
-    const fetchTradingPlan = async () => {
-      if (user) {
-        try {
-          const response = await api.get('/api/trading-plan');
-          const { propFirm, accountConfig, riskConfig, tradingPlan, accounts } = response.data;
-          setPropFirm(propFirm);
-          setAccountConfig(accountConfig);
-          setRiskConfig(riskConfig);
-          setTradingPlan(tradingPlan);
-          setAccounts(accounts || []);
-        } catch (error) {
-          console.error('Failed to fetch trading plan', error);
+    const loadTradingPlan = () => {
+      if (user?.email) {
+        // Load from localStorage based on user email
+        const savedTradingPlan = localStorage.getItem(`trading_plan_${user.email}`);
+        const savedPropFirm = localStorage.getItem(`prop_firm_${user.email}`);
+        const savedAccountConfig = localStorage.getItem(`account_config_${user.email}`);
+        const savedRiskConfig = localStorage.getItem(`risk_config_${user.email}`);
+        
+        if (savedTradingPlan) {
+          setTradingPlan(JSON.parse(savedTradingPlan));
+        }
+        if (savedPropFirm) {
+          setPropFirm(JSON.parse(savedPropFirm));
+        }
+        if (savedAccountConfig) {
+          setAccountConfig(JSON.parse(savedAccountConfig));
+        }
+        if (savedRiskConfig) {
+          setRiskConfig(JSON.parse(savedRiskConfig));
         }
       }
     };
 
-    fetchTradingPlan();
-  }, [user]);
+    loadTradingPlan();
+  }, [user?.email]);
 
-  const saveData = async (data: any) => {
-    try {
-      await api.post('/api/trading-plan', data);
-    } catch (error) {
-      console.error('Failed to save trading plan', error);
+  const saveData = (data: any, user: any) => {
+    if (user?.email) {
+      // Save to localStorage with user email as key
+      if (data.tradingPlan) {
+        localStorage.setItem(`trading_plan_${user.email}`, JSON.stringify(data.tradingPlan));
+      }
+      if (data.propFirm) {
+        localStorage.setItem(`prop_firm_${user.email}`, JSON.stringify(data.propFirm));
+      }
+      if (data.accountConfig) {
+        localStorage.setItem(`account_config_${user.email}`, JSON.stringify(data.accountConfig));
+      }
+      if (data.riskConfig) {
+        localStorage.setItem(`risk_config_${user.email}`, JSON.stringify(data.riskConfig));
+      }
     }
   };
 
@@ -159,23 +176,31 @@ export const TradingPlanProvider = ({ children }: { children: ReactNode }) => {
 
   const updatePropFirm = useCallback((firm: PropFirm) => {
     setPropFirm(firm);
-    saveData({ propFirm: firm });
-  }, []);
+    if (user?.email) {
+      localStorage.setItem(`prop_firm_${user.email}`, JSON.stringify(firm));
+    }
+  }, [user?.email]);
 
   const updateAccountConfig = useCallback((config: AccountConfig) => {
     setAccountConfig(config);
-    saveData({ accountConfig: config });
-  }, []);
+    if (user?.email) {
+      localStorage.setItem(`account_config_${user.email}`, JSON.stringify(config));
+    }
+  }, [user?.email]);
 
   const updateRiskConfig = useCallback((config: RiskConfig) => {
     setRiskConfig(config);
-    saveData({ riskConfig: config });
-  }, []);
+    if (user?.email) {
+      localStorage.setItem(`risk_config_${user.email}`, JSON.stringify(config));
+    }
+  }, [user?.email]);
 
   const updateTradingPlan = useCallback((plan: TradingPlan) => {
     setTradingPlan(plan);
-    saveData({ tradingPlan: plan });
-  }, []);
+    if (user?.email) {
+      localStorage.setItem(`trading_plan_${user.email}`, JSON.stringify(plan));
+    }
+  }, [user?.email]);
 
   const resetPlan = useCallback(async () => {
     setPropFirm(null);

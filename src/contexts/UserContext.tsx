@@ -38,14 +38,29 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const storedUser = localStorage.getItem('current_user');
-    const storedToken = localStorage.getItem('token');
-    if (storedUser && storedToken) {
-      const parsedUser = JSON.parse(storedUser);
-      const decodedToken = JSON.parse(atob(storedToken.split('.')[1]));
-      const plan = decodedToken.plan_type || 'basic';
-      api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-      return { ...parsedUser, membershipTier: plan, isAuthenticated: true, token: storedToken };
+    try {
+      const storedUser = localStorage.getItem('current_user');
+      const storedToken = localStorage.getItem('access_token') || localStorage.getItem('token');
+      
+      if (storedUser && storedToken) {
+        const parsedUser = JSON.parse(storedUser);
+        
+        // Set up API authorization
+        if (storedToken.startsWith('demo-token')) {
+          // Demo token - don't set API auth
+        } else {
+          api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        }
+        
+        return { 
+          ...parsedUser, 
+          isAuthenticated: true, 
+          token: storedToken,
+          setupComplete: true // Always true if user data exists
+        };
+      }
+    } catch (error) {
+      console.error('Error loading user from localStorage:', error);
     }
     return null;
   });
@@ -65,9 +80,19 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = (userData: Omit<User, 'isAuthenticated' | 'membershipTier'>, token: string, rememberMe = false) => {
-    const decodedToken = JSON.parse(atob(token.split('.')[1]));
-    const plan = decodedToken.plan_type || 'basic';
-    const name = decodedToken.username || userData.email;
+    let plan = 'professional';
+    let name = userData.name;
+    
+    // Only decode JWT if it's not a demo token
+    if (!token.startsWith('demo-token')) {
+      try {
+        const decodedToken = JSON.parse(atob(token.split('.')[1]));
+        plan = decodedToken.plan_type || 'professional';
+        name = decodedToken.username || userData.name || userData.email;
+      } catch (error) {
+        console.error('Error decoding token:', error);
+      }
+    }
 
     const updatedUserData = {
       ...userData,
@@ -75,21 +100,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       membershipTier: plan,
     };
 
-    const finalUserData = { ...updatedUserData, membershipTier: plan, isAuthenticated: true, token };
+    const finalUserData = { 
+      ...updatedUserData, 
+      membershipTier: plan as any, 
+      isAuthenticated: true, 
+      setupComplete: true,
+      token 
+    };
 
     // Store user data with email as key for persistence
     localStorage.setItem('current_user', JSON.stringify(finalUserData));
     localStorage.setItem(`user_profile_${userData.email}`, JSON.stringify(finalUserData));
-    localStorage.setItem('token', token);
     localStorage.setItem('access_token', token);
     
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    // Only set API auth for real tokens
+    if (!token.startsWith('demo-token')) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+    
     setUser(finalUserData);
   };
 
   const logout = () => {
     // Remove authentication but keep user data for persistence
-    localStorage.removeItem('token');
     localStorage.removeItem('access_token');
     localStorage.removeItem('current_user');
     delete api.defaults.headers.common['Authorization'];

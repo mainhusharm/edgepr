@@ -345,14 +345,14 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   }, [tradingState, user?.email]);
 
   // Check if user needs to complete setup
-  if (!user?.setupComplete || !tradingPlan || !tradingPlan.userProfile || !tradingPlan.riskParameters) {
+  if (!user?.setupComplete) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center font-inter">
         <FuturisticBackground />
         <FuturisticCursor />
         <div className="relative z-10 text-center">
-          <div className="text-blue-400 text-xl animate-pulse mb-4">Setting Up Your Dashboard</div>
-          <p className="text-gray-400 mb-4">Please complete your account setup to access the dashboard.</p>
+          <div className="text-blue-400 text-xl animate-pulse mb-4">Incomplete Setup</div>
+          <p className="text-gray-400 mb-4">Please complete the signup process to access the dashboard.</p>
           <button
             onClick={() => navigate('/signup')}
             className="px-6 py-2 rounded-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-all"
@@ -375,6 +375,39 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
       </div>
     );
   }
+
+  // Initialize trading plan if not exists but user has trading data
+  useEffect(() => {
+    if (user?.tradingData && !tradingPlan) {
+      const generatedPlan = {
+        userProfile: {
+          initialBalance: parseFloat(user.tradingData.accountSize) || 100000,
+          accountEquity: parseFloat(user.tradingData.accountSize) || 100000,
+          tradesPerDay: user.tradingData.tradesPerDay,
+          tradingSession: user.tradingData.tradingSession,
+          cryptoAssets: user.tradingData.cryptoAssets || [],
+          forexAssets: user.tradingData.forexAssets || [],
+          hasAccount: user.tradingData.hasAccount,
+          experience: user.tradingData.tradingExperience,
+        },
+        riskParameters: {
+          maxDailyRisk: (parseFloat(user.tradingData.accountSize) || 100000) * 0.05,
+          maxDailyRiskPct: '5%',
+          baseTradeRisk: (parseFloat(user.tradingData.accountSize) || 100000) * (parseFloat(user.tradingData.riskPerTrade) / 100),
+          baseTradeRiskPct: `${user.tradingData.riskPerTrade}%`,
+          minRiskReward: `1:${user.tradingData.riskRewardRatio}`
+        },
+        trades: [],
+        propFirmCompliance: {
+          dailyLossLimit: '5%',
+          totalDrawdownLimit: '10%',
+          profitTarget: '8%',
+          consistencyRule: 'Maintain steady performance'
+        }
+      };
+      updateTradingPlan(generatedPlan);
+    }
+  }, [user?.tradingData, tradingPlan, updateTradingPlan]);
 
   const hasProAccess = ['pro', 'professional', 'elite', 'enterprise'].includes(user.membershipTier);
   const hasJournalAccess = ['pro', 'professional', 'elite', 'enterprise'].includes(user.membershipTier);
@@ -450,7 +483,153 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             </p>
             
             {/* Display questionnaire data */}
-            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm max-w-4xl mx-auto">
+            {user.tradingData && (
+              <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Prop Firm:</span>
+                  <span className="text-white ml-2 font-semibold">{user.tradingData.propFirm}</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Account Type:</span>
+                  <span className="text-white ml-2 font-semibold">{user.tradingData.accountType}</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Account Size:</span>
+                  <span className="text-white ml-2 font-semibold">
+                    ${parseInt(user.tradingData.accountSize).toLocaleString()}
+                  </span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Experience:</span>
+                  <span className="text-white ml-2 font-semibold capitalize">{user.tradingData.tradingExperience}</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Trades/Day:</span>
+                  <span className="text-white ml-2 font-semibold">{user.tradingData.tradesPerDay}</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Risk/Trade:</span>
+                  <span className="text-white ml-2 font-semibold">{user.tradingData.riskPerTrade}%</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Risk:Reward:</span>
+                  <span className="text-white ml-2 font-semibold">1:{user.tradingData.riskRewardRatio}</span>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-gray-400">Session:</span>
+                  <span className="text-white ml-2 font-semibold capitalize">{user.tradingData.tradingSession}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="text-right space-y-2">
+            <div className="text-sm text-gray-400">Total P&L</div>
+            <div className={`text-3xl font-bold ${tradingState && tradingState.performanceMetrics.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {tradingState
+                ? `${tradingState.performanceMetrics.totalPnl >= 0 ? '+' : ''}$${tradingState.performanceMetrics.totalPnl.toFixed(2)}`
+                : '$0'}
+            </div>
+            <div className="text-sm text-gray-400">Timezone</div>
+            <select
+              value={selectedTimezone}
+              onChange={(e) => setSelectedTimezone(e.target.value)}
+              className="bg-gray-800 text-white p-2 rounded border border-gray-600"
+            >
+              <option value="UTC">UTC (GMT+0)</option>
+              <option value="UTC+5:30">UTC+5:30 (Kolkata)</option>
+              <option value="UTC-5">UTC-5 (New York)</option>
+              <option value="UTC-8">UTC-8 (Los Angeles)</option>
+              <option value="UTC+1">UTC+1 (London)</option>
+              <option value="UTC+9">UTC+9 (Tokyo)</option>
+              <option value="UTC+10">UTC+10 (Sydney)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="holo-stats">
+        {stats.map((stat, index) => (
+          <div key={index} className="holo-stat">
+            <div className="holo-value">{stat.value}</div>
+            <div style={{color: 'rgba(255,255,255,0.5)', marginTop: '10px'}}>{stat.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 holo-card">
+          <h3 className="text-xl font-semibold text-white mb-6">Recent Trades</h3>
+          {!tradingState || tradingState.trades.length === 0 ? (
+            <div className="text-center py-12">
+              <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <div className="text-gray-400 text-lg font-medium mb-2">No trades recorded yet</div>
+              <div className="text-sm text-gray-500 mb-4">
+                Start taking signals and mark them as "taken" to see your performance here
+              </div>
+              <div className="bg-blue-600/20 border border-blue-600 rounded-lg p-4">
+                <p className="text-blue-300 text-sm">
+                  <strong>Important:</strong> Click "Mark as Taken" on any signal you execute. This helps us track
+                  your performance without accessing your trading account credentials.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {tradingState.trades.slice(-5).reverse().map((trade, index) => (
+                <div key={index} className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <div
+                      className={`w-3 h-3 rounded-full ${
+                        (trade.pnl || 0) > 0 ? 'bg-green-400' : (trade.pnl || 0) < 0 ? 'bg-red-400' : 'bg-yellow-400'
+                      }`}
+                    ></div>
+                    <div>
+                      <div className="text-white font-medium">{trade.pair}</div>
+                      <div className="text-sm text-gray-400">
+                        {trade.outcome} • {new Date(trade.entryTime).toLocaleTimeString()}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-medium ${(trade.pnl || 0) > 0 ? 'text-green-400' : (trade.pnl || 0) < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                      ${(trade.pnl || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="holo-card">
+          <h3 className="text-lg font-semibold text-white mb-4">Market Status</h3>
+          {marketStatus && (
+            <div className="space-y-4">
+              <div className="text-xs text-gray-400 mb-2">
+                {marketStatus.localTime}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Forex Market</span>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${marketStatus.isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                  <span className={`text-sm ${marketStatus.isOpen ? 'text-green-400' : 'text-red-400'}`}>
+                    {marketStatus.isOpen ? 'Open' : 'Closed'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Current Session</span>
+                <span className="text-white text-sm">{marketStatus.currentSession}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Next Session</span>
+                <span className="text-white text-sm">{marketStatus.nextSession} ({marketStatus.timeUntilNext})</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
               <div className="bg-gray-800/50 rounded-lg p-3">
                 <span className="text-gray-400">Prop Firm:</span>
                 <span className="text-white ml-2 font-semibold">{user.tradingData?.propFirm || 'Not Set'}</span>
