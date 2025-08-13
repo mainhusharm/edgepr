@@ -62,28 +62,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
       membershipTier: plan,
     };
 
-    // Ensure the new plan overwrites any existing plan in localStorage
-    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const finalUserData = { ...storedUser, ...updatedUserData, membershipTier: plan };
+    const finalUserData = { ...updatedUserData, membershipTier: plan, isAuthenticated: true, token };
 
-    const storage = rememberMe ? localStorage : sessionStorage;
-    storage.setItem('user', JSON.stringify(finalUserData));
-    storage.setItem('token', token);
+    // Always use localStorage to persist data
+    localStorage.setItem('user', JSON.stringify(finalUserData));
+    localStorage.setItem('token', token);
+    localStorage.setItem('access_token', token);
+    
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    setUser({ ...finalUserData, isAuthenticated: true, token });
+    setUser(finalUserData);
   };
 
   const logout = () => {
-    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const userToKeep = {
-      id: storedUser.id,
-      name: storedUser.name,
-      email: storedUser.email,
-      setupComplete: storedUser.setupComplete,
-    };
-
-    localStorage.setItem('user', JSON.stringify(userToKeep));
+    // Don't remove user data, just remove authentication
     localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
     delete api.defaults.headers.common['Authorization'];
     setUser(null);
   };

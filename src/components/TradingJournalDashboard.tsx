@@ -69,6 +69,7 @@ const TradingJournalDashboard: React.FC = () => {
       setEntries(prev => [entry, ...prev]);
     }
     setEditingEntry(null);
+    setShowEntryModal(false);
   };
 
   const handleEditEntry = (entry: JournalEntry) => {
