@@ -1,0 +1,10 @@
+Flask>=2.2.5
+Flask-Cors
+Flask-JWT-Extended
+Flask-SQLAlchemy
+python-dotenv
+psycopg2-binary
+gunicorn
+werkzeug
+requests
+flask-socketio
