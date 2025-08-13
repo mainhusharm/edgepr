@@ -57,6 +57,9 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   const [userAccounts, setUserAccounts] = useState<any[]>([]);
   const [performanceData, setPerformanceData] = useState<any[]>([]);
   const [currentAccount, setCurrentAccount] = useState<any>(null);
+  const [marketStatus, setMarketStatus] = useState<any>(null);
+  const [selectedTimezone, setSelectedTimezone] = useState('UTC');
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Check if user has given consent
   useEffect(() => {
@@ -66,6 +69,116 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
     }
   }, [user]);
 
+  // Update current time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Calculate market status based on timezone
+  useEffect(() => {
+    const calculateMarketStatus = () => {
+      const now = new Date();
+      const utcHour = now.getUTCHours();
+      const dayOfWeek = now.getUTCDay();
+      
+      // Adjust for selected timezone
+      const timezoneOffsets: { [key: string]: number } = {
+        'UTC': 0,
+        'UTC+5:30': 5.5,
+        'UTC-5': -5,
+        'UTC-8': -8,
+        'UTC+1': 1,
+        'UTC+9': 9,
+        'UTC+10': 10
+      };
+      
+      const offset = timezoneOffsets[selectedTimezone] || 0;
+      const localHour = (utcHour + offset + 24) % 24;
+      
+      // Weekend check
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6 || (dayOfWeek === 5 && utcHour >= 22);
+      
+      let currentSession = 'Market Closed';
+      let nextSession = 'Sydney';
+      let timeUntilNext = '';
+      let isOpen = false;
+      
+      if (!isWeekend) {
+        // Sydney: 22:00 UTC - 07:00 UTC
+        if (utcHour >= 22 || utcHour < 7) {
+          currentSession = 'Sydney';
+          nextSession = 'Tokyo';
+          isOpen = true;
+        }
+        // Tokyo: 00:00 UTC - 09:00 UTC
+        else if (utcHour >= 0 && utcHour < 9) {
+          currentSession = 'Tokyo';
+          nextSession = 'London';
+          isOpen = true;
+        }
+        // London: 08:00 UTC - 17:00 UTC
+        else if (utcHour >= 8 && utcHour < 17) {
+          currentSession = 'London';
+          nextSession = 'New York';
+          isOpen = true;
+        }
+        // New York: 13:00 UTC - 22:00 UTC
+        else if (utcHour >= 13 && utcHour < 22) {
+          currentSession = 'New York';
+          nextSession = 'Sydney';
+          isOpen = true;
+        }
+      }
+      
+      // Calculate time until next session
+      if (isWeekend) {
+        const nextSunday = new Date(now);
+        nextSunday.setUTCDate(now.getUTCDate() + (7 - dayOfWeek));
+        nextSunday.setUTCHours(22, 0, 0, 0);
+        const diff = nextSunday.getTime() - now.getTime();
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        timeUntilNext = `${hours}h ${minutes}m`;
+      } else {
+        // Calculate time to next session
+        const sessionTimes = [22, 0, 8, 13]; // Sydney, Tokyo, London, NY
+        const currentSessionIndex = sessionTimes.findIndex((time, index) => {
+          const nextTime = sessionTimes[(index + 1) % sessionTimes.length];
+          return time <= utcHour && utcHour < nextTime;
+        });
+        
+        if (currentSessionIndex !== -1) {
+          const nextSessionTime = sessionTimes[(currentSessionIndex + 1) % sessionTimes.length];
+          let hoursUntilNext = nextSessionTime - utcHour;
+          if (hoursUntilNext <= 0) hoursUntilNext += 24;
+          timeUntilNext = `${hoursUntilNext}h 0m`;
+        }
+      }
+      
+      setMarketStatus({
+        isOpen,
+        currentSession,
+        nextSession,
+        timeUntilNext,
+        localTime: now.toLocaleString('en-US', {
+          timeZone: selectedTimezone === 'UTC+5:30' ? 'Asia/Kolkata' : 'UTC',
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      });
+    };
+    
+    calculateMarketStatus();
+  }, [selectedTimezone, currentTime]);
+
   const handleConsentAccept = () => {
     setShowConsentForm(false);
   };
@@ -74,19 +187,19 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
     onLogout();
   };
 
-  useEffect(() => {
-    const fetchAccounts = async () => {
-      try {
-        const response = await api.get('/accounts');
-        setUserAccounts(response.data);
-        if (response.data.length > 0) {
-          setSelectedAccount(response.data[0].id);
-        }
-      } catch (error) {
-        console.error('Error fetching accounts:', error);
+  const fetchAccounts = async () => {
+    try {
+      const response = await api.get('/accounts');
+      setUserAccounts(response.data);
+      if (response.data.length > 0) {
+        setSelectedAccount(response.data[0].id);
       }
-    };
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    }
+  };
 
+  useEffect(() => {
     if (user) {
       fetchAccounts();
     }
@@ -117,19 +230,49 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   useEffect(() => {
     const initState = async () => {
       if (user && tradingPlan && currentAccount) {
-        const loadedState = await loadState();
+        // Load state from localStorage first, then from API
+        const localState = localStorage.getItem(`trading_state_${user.id}`);
+        let loadedState = null;
+        
+        if (localState) {
+          try {
+            loadedState = JSON.parse(localState);
+            // Convert date strings back to Date objects
+            if (loadedState.trades) {
+              loadedState.trades = loadedState.trades.map((trade: any) => ({
+                ...trade,
+                entryTime: new Date(trade.entryTime),
+                closeTime: trade.closeTime ? new Date(trade.closeTime) : undefined
+              }));
+            }
+          } catch (e) {
+            console.error('Error parsing local state:', e);
+          }
+        }
+        
+        if (!loadedState) {
+          try {
+            loadedState = await loadState();
+          } catch (e) {
+            console.error('Error loading state from API:', e);
+          }
+        }
+        
         if (loadedState) {
           setTradingState(loadedState);
         } else {
-          const initialEquity = currentAccount.balance;
+          // Get initial balance from questionnaire data
+          const questionnaireData = JSON.parse(localStorage.getItem('questionnaireAnswers') || '{}');
+          const initialEquity = questionnaireData.accountEquity || tradingPlan.userProfile.accountEquity || 100000;
+          
           const initialState: TradingState = {
             initialEquity,
             currentEquity: initialEquity,
             trades: [],
             openPositions: [],
             riskSettings: {
-              riskPerTrade: 1,
-              dailyLossLimit: 5,
+              riskPerTrade: tradingPlan.riskParameters?.baseTradeRisk ? (tradingPlan.riskParameters.baseTradeRisk / initialEquity) * 100 : 1,
+              dailyLossLimit: tradingPlan.riskParameters?.maxDailyRisk ? (tradingPlan.riskParameters.maxDailyRisk / initialEquity) * 100 : 5,
               consecutiveLossesLimit: 3,
             },
             performanceMetrics: {
@@ -155,11 +298,20 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             },
           };
           setTradingState(initialState);
+          // Save initial state to localStorage
+          localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(initialState));
         }
       }
     };
     initState();
   }, [user, tradingPlan, currentAccount]);
+
+  // Save trading state to localStorage whenever it changes
+  useEffect(() => {
+    if (tradingState && user) {
+      localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(tradingState));
+    }
+  }, [tradingState, user]);
 
   if (!tradingPlan || !tradingPlan.userProfile || !tradingPlan.riskParameters) {
     return (
@@ -241,21 +393,21 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
   const stats = [
     {
       label: 'Account Balance',
-      value: tradingState ? `$${tradingState.currentEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (accountConfig ? `$${accountConfig.size.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$0'),
+      value: tradingState ? `$${tradingState.currentEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${tradingPlan.userProfile.accountEquity.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       change: 'Live Data',
       icon: <DollarSign className="w-8 h-8" />,
       color: 'green',
     },
     {
       label: 'Win Rate',
-      value: performanceData.length > 0 ? `${performanceData[0].win_rate.toFixed(1)}%` : 'No Data',
+      value: tradingState ? `${tradingState.performanceMetrics.winRate.toFixed(1)}%` : '0%',
       change: 'From Taken Trades',
       icon: <Target className="w-8 h-8" />,
       color: 'blue',
     },
     {
       label: 'Total Trades',
-      value: performanceData.length > 0 ? performanceData[0].total_trades.toString() : '0',
+      value: tradingState ? tradingState.trades.length.toString() : '0',
       change: 'Active Trading',
       icon: <Activity className="w-8 h-8" />,
       color: 'purple',
@@ -263,12 +415,12 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
     {
       label: 'Total P&L',
       value:
-        performanceData.length > 0
-          ? `${performanceData[0].total_pnl >= 0 ? '+' : ''}$${performanceData[0].total_pnl.toFixed(2)}`
-          : 'No Data',
+        tradingState
+          ? `${tradingState.performanceMetrics.totalPnl >= 0 ? '+' : ''}$${tradingState.performanceMetrics.totalPnl.toFixed(2)}`
+          : '$0.00',
       change: 'From Trades',
       icon: <Award className="w-8 h-8" />,
-      color: performanceData.length > 0 && performanceData[0].total_pnl >= 0 ? 'green' : 'red',
+      color: tradingState && tradingState.performanceMetrics.totalPnl >= 0 ? 'green' : 'red',
     },
   ];
 
@@ -281,18 +433,40 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             <p className="text-gray-400">
               Your {user.membershipTier.charAt(0).toUpperCase() + user.membershipTier.slice(1)} Dashboard
             </p>
+            {/* Display questionnaire data */}
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-gray-400">Experience:</span>
+                <span className="text-white ml-2 capitalize">{tradingPlan.userProfile.experience}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Trades/Day:</span>
+                <span className="text-white ml-2">{tradingPlan.userProfile.tradesPerDay}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Session:</span>
+                <span className="text-white ml-2 capitalize">{tradingPlan.userProfile.tradingSession}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">Account:</span>
+                <span className="text-white ml-2">{tradingPlan.userProfile.hasAccount === 'yes' ? 'Existing' : 'New'}</span>
+              </div>
+            </div>
           </div>
-          <div className="text-right">
+          <div className="text-right space-y-2">
+            <div className="text-sm text-gray-400">Timezone</div>
             <select
-              value={selectedAccount}
-              onChange={(e) => setSelectedAccount(e.target.value)}
-              className="bg-gray-800 text-white p-2 rounded"
+              value={selectedTimezone}
+              onChange={(e) => setSelectedTimezone(e.target.value)}
+              className="bg-gray-800 text-white p-2 rounded border border-gray-600"
             >
-              {userAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.account_name}
-                </option>
-              ))}
+              <option value="UTC">UTC (GMT+0)</option>
+              <option value="UTC+5:30">UTC+5:30 (Kolkata)</option>
+              <option value="UTC-5">UTC-5 (New York)</option>
+              <option value="UTC-8">UTC-8 (Los Angeles)</option>
+              <option value="UTC+1">UTC+1 (London)</option>
+              <option value="UTC+9">UTC+9 (Tokyo)</option>
+              <option value="UTC+10">UTC+10 (Sydney)</option>
             </select>
           </div>
         </div>
@@ -309,37 +483,8 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 holo-card">
-          <h3 className="text-xl font-semibold text-white mb-6">Performance Overview</h3>
-          {performanceData.length === 0 ? (
-            <div className="text-center py-12">
-              <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <div className="text-gray-400 text-lg font-medium mb-2">No performance data yet</div>
-              <div className="text-sm text-gray-500 mb-4">
-                Trade data will appear here once you start trading.
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {performanceData.map((perf, index) => (
-                <div key={index} className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div>
-                      <div className="text-white font-medium">{new Date(perf.date).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`font-medium ${perf.total_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {perf.total_pnl.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="lg:col-span-2 holo-card">
           <h3 className="text-xl font-semibold text-white mb-6">Recent Trades</h3>
-          {tradingState && tradingState.trades.length === 0 ? (
+          {!tradingState || tradingState.trades.length === 0 ? (
             <div className="text-center py-12">
               <Activity className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <div className="text-gray-400 text-lg font-medium mb-2">No trades recorded yet</div>
@@ -355,7 +500,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
             </div>
           ) : (
             <div className="space-y-4">
-              {tradingState?.trades.slice(-5).reverse().map((trade, index) => (
+              {tradingState.trades.slice(-5).reverse().map((trade, index) => (
                 <div key={index} className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
                   <div className="flex items-center space-x-4">
                     <div
@@ -364,7 +509,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
                       }`}
                     ></div>
                     <div>
-                      <div className="text-white font-medium">Trade {trade.id.slice(-4)}</div>
+                      <div className="text-white font-medium">{trade.pair}</div>
                       <div className="text-sm text-gray-400">
                         {trade.outcome} • {new Date(trade.entryTime).toLocaleTimeString()}
                       </div>
@@ -372,7 +517,7 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
                   </div>
                   <div className="text-right">
                     <div className={`font-medium ${(trade.pnl || 0) > 0 ? 'text-green-400' : (trade.pnl || 0) < 0 ? 'text-red-400' : 'text-yellow-400'}`}>
-                      {(trade.pnl || 0).toFixed(2)}
+                      ${(trade.pnl || 0).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -382,23 +527,30 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
         </div>
         <div className="holo-card">
           <h3 className="text-lg font-semibold text-white mb-4">Market Status</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Forex Market</span>
-              <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-green-400 text-sm">Open</span>
+          {marketStatus && (
+            <div className="space-y-4">
+              <div className="text-xs text-gray-400 mb-2">
+                {marketStatus.localTime}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Forex Market</span>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${marketStatus.isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                  <span className={`text-sm ${marketStatus.isOpen ? 'text-green-400' : 'text-red-400'}`}>
+                    {marketStatus.isOpen ? 'Open' : 'Closed'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Current Session</span>
+                <span className="text-white text-sm">{marketStatus.currentSession}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Next Session</span>
+                <span className="text-white text-sm">{marketStatus.nextSession} ({marketStatus.timeUntilNext})</span>
               </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Current Session</span>
-              <span className="text-white text-sm">London</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Next Session</span>
-              <span className="text-white text-sm">New York (2h 15m)</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -414,6 +566,9 @@ const Dashboard = ({ onLogout }: { onLogout: () => void }) => {
       const newTrade = stateAfterOpen.openPositions[stateAfterOpen.openPositions.length - 1];
       const finalState = closeTrade(stateAfterOpen, newTrade.id, outcome, pnl);
       setTradingState(finalState);
+      
+      // Save to localStorage immediately
+      localStorage.setItem(`trading_state_${user.id}`, JSON.stringify(finalState));
 
       if (hasProAccess) {
         handleTabClick('ai-coach');

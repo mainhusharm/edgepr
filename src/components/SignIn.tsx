@@ -37,7 +37,7 @@ const SignIn = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,19 +49,24 @@ const SignIn = () => {
 
       if (response.ok) {
         localStorage.setItem('access_token', data.access_token);
-        // The user data can be fetched from a protected route
-        // after login, or decoded from the JWT.
-        // For now, we'll just set some basic info.
-        const newUser = {
-          id: '', // This will be set from the decoded token on the server
-          name: email,
+        
+        // Decode JWT to get user info
+        const tokenPayload = JSON.parse(atob(data.access_token.split('.')[1]));
+        
+        const userData = {
+          id: tokenPayload.sub || '',
+          name: tokenPayload.username || email,
           email: email,
+          membershipTier: tokenPayload.plan_type || 'professional',
           accountType: 'funded' as const,
           riskTolerance: 'moderate' as const,
+          isAuthenticated: true,
           setupComplete: true,
-          selectedPlan
+          selectedPlan,
+          token: data.access_token
         };
-        login(newUser, data.access_token, rememberMe);
+        
+        login(userData, data.access_token, rememberMe);
         navigate('/dashboard');
       } else {
         setError(data.msg || 'Invalid email or password. Please check your credentials.');

@@ -21,37 +21,72 @@ const SignalsFeed: React.FC<SignalsFeedProps> = ({ onMarkAsTaken, onAddToJournal
   const [skippedSignalIds, setSkippedSignalIds] = useState<string[]>([]);
   const [dailyLossLimitHit, setDailyLossLimitHit] = useState(false);
 
-  const questionnaireData = useMemo(() => {
-    const data = localStorage.getItem('questionnaireData');
-    return data ? JSON.parse(data) : {};
-  }, []);
-
-  const dailyLossLimit = useMemo(() => {
-    return parseFloat(questionnaireData.dailyLossLimit) || 0;
-  }, [questionnaireData]);
-
   useEffect(() => {
-    const fetchSignals = async () => {
+    const loadSignals = () => {
       try {
-        const response = await api.get('/api/signals');
-        setSignals(response.data);
+        // Load signals from localStorage (admin generated signals)
+        const adminSignals = JSON.parse(localStorage.getItem('telegram_messages') || '[]');
+        
+        // Convert telegram messages to Signal format
+        const convertedSignals: Signal[] = adminSignals.map((msg: any) => {
+          const lines = msg.text.split('\n');
+          const pair = lines[0] || 'UNKNOWN';
+          const direction = lines[1]?.includes('BUY') ? 'LONG' : lines[1]?.includes('SELL') ? 'SHORT' : 'LONG';
+          
+          // Extract prices from text
+          const entryMatch = msg.text.match(/Entry\s+([0-9.]+)/i);
+          const slMatch = msg.text.match(/Stop Loss\s+([0-9.]+)/i);
+          const tpMatch = msg.text.match(/Take Profit\s+([0-9.,\s]+)/i);
+          const confidenceMatch = msg.text.match(/Confidence\s+([0-9]+)%/i);
+          
+          const entryPrice = entryMatch ? parseFloat(entryMatch[1]) : 0;
+          const stopLoss = slMatch ? parseFloat(slMatch[1]) : 0;
+          const takeProfit = tpMatch ? parseFloat(tpMatch[1].split(',')[0]) : 0;
+          const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 0;
+          
+          return {
+            id: msg.id.toString(),
+            pair,
+            direction,
+            entryPrice,
+            stopLoss,
+            takeProfit,
+            confidence,
+            riskRewardRatio: '1:2',
+            timestamp: msg.timestamp,
+            description: msg.text.split('\n\n')[1] || 'Professional trading signal',
+            market: 'forex',
+            status: 'active'
+          };
+        });
+        
+        setSignals(convertedSignals);
       } catch (error) {
         console.error('Error fetching signals:', error);
         setSignals([]);
       }
     };
 
-    fetchSignals();
-    const interval = setInterval(fetchSignals, 10000); // Refresh every 10 seconds
+    loadSignals();
+    
+    // Listen for new signals from admin
+    const handleNewSignal = () => {
+      loadSignals();
+    };
+    
+    window.addEventListener('newSignalSent', handleNewSignal);
+    window.addEventListener('newSignalGenerated', handleNewSignal);
+    
+    const interval = setInterval(loadSignals, 5000); // Refresh every 5 seconds
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('newSignalSent', handleNewSignal);
+      window.removeEventListener('newSignalGenerated', handleNewSignal);
+    };
   }, []);
 
   const handleMarkAsTakenClick = (signal: Signal) => {
-    if (dailyLossLimitHit) {
-      alert('You have hit your daily loss limit. No more trades are allowed today.');
-      return;
-    }
     setTakenSignalIds(prev => [...prev, signal.id]);
     setSelectedSignal(signal);
     setShowOutcomeModal(true);
@@ -85,9 +120,6 @@ const SignalsFeed: React.FC<SignalsFeedProps> = ({ onMarkAsTaken, onAddToJournal
       } else if (outcome === 'Stop Loss Hit') {
         const newLosingTrades = [...losingTrades, selectedSignal];
         setLosingTrades(newLosingTrades);
-        if (dailyLossLimit > 0 && newLosingTrades.length >= dailyLossLimit) {
-          setDailyLossLimitHit(true);
-        }
       }
       
       if (outcome === 'Manual Close') {
@@ -98,6 +130,12 @@ const SignalsFeed: React.FC<SignalsFeedProps> = ({ onMarkAsTaken, onAddToJournal
       } else {
         onMarkAsTaken(selectedSignal, outcome);
       }
+      
+      // Remove signal from active signals
+      const updatedMessages = JSON.parse(localStorage.getItem('telegram_messages') || '[]')
+        .filter((msg: any) => msg.id.toString() !== selectedSignal.id);
+      localStorage.setItem('telegram_messages', JSON.stringify(updatedMessages));
+      
       setSignals(prevSignals => prevSignals.filter(s => s.id !== selectedSignal.id));
     }
     setShowOutcomeModal(false);
