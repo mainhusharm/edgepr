@@ -157,17 +157,17 @@ const AccountSettings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8">
+      <div className="bg-gray-900/50 backdrop-blur-lg rounded-2xl border border-cyan-500/30 p-8 shadow-2xl shadow-cyan-500/10">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2">Account Settings</h2>
             <p className="text-gray-400">Manage your account preferences and security settings</p>
           </div>
           {saveMessage && (
-            <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+            <div className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${
               saveMessage.includes('successfully') 
-                ? 'bg-green-600/20 text-green-400 border border-green-500/30' 
-                : 'bg-red-600/20 text-red-400 border border-red-500/30'
+                ? 'bg-green-600/20 text-green-400 border border-green-500/30 shadow-lg shadow-green-500/20' 
+                : 'bg-red-600/20 text-red-400 border border-red-500/30 shadow-lg shadow-red-500/20'
             }`}>
               {saveMessage.includes('successfully') ? (
                 <CheckCircle className="w-4 h-4" />
@@ -180,15 +180,15 @@ const AccountSettings: React.FC = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-cyan-500/30 mb-6">
+        <div className="flex border-b border-cyan-500/30 mb-6 bg-gray-800/20 rounded-t-lg">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-all duration-300 ${
+              className={`flex items-center space-x-2 px-4 py-3 border-b-2 transition-all duration-300 hover:bg-gray-700/30 ${
                 activeTab === tab.id
-                  ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10'
-                  : 'border-transparent text-gray-400 hover:text-cyan-300 hover:bg-gray-700/30'
+                  ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10 shadow-lg shadow-cyan-500/20'
+                  : 'border-transparent text-gray-400 hover:text-cyan-300'
               }`}
             >
               {tab.icon}
@@ -207,7 +207,7 @@ const AccountSettings: React.FC = () => {
                   type="text"
                   value={settings.personalInfo.firstName}
                   onChange={(e) => handleInputChange('personalInfo', 'firstName', e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10"
                 />
               </div>
               <div>
@@ -216,7 +216,7 @@ const AccountSettings: React.FC = () => {
                   type="text"
                   value={settings.personalInfo.lastName}
                   onChange={(e) => handleInputChange('personalInfo', 'lastName', e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                  className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10"
                 />
               </div>
             </div>
@@ -227,7 +227,7 @@ const AccountSettings: React.FC = () => {
                 type="email"
                 value={settings.personalInfo.email}
                 onChange={(e) => handleInputChange('personalInfo', 'email', e.target.value)}
-                className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all"
+                className="w-full px-4 py-3 bg-gray-800/70 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/10"
               />
             </div>
 
@@ -554,11 +554,11 @@ const AccountSettings: React.FC = () => {
         )}
 
         {/* Save Button */}
-        <div className="pt-6 border-t border-cyan-500/30">
+        <div className="pt-6 border-t border-cyan-500/30 bg-gradient-to-r from-gray-800/20 to-gray-900/20 rounded-b-lg">
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center space-x-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg"
+            className="flex items-center space-x-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-all shadow-lg hover:shadow-cyan-500/30"
           >
             {isSaving ? (
               <>

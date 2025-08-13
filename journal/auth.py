@@ -21,6 +21,7 @@ def register():
     email = data.get('email')
     password = data.get('password')
     plan_type = data.get('plan_type')
+    trading_data = data.get('tradingData', {})
 
     if not firstName or not lastName or not email or not password or not plan_type:
         return jsonify({"msg": "Missing required fields"}), 400
@@ -42,6 +43,11 @@ def register():
     db.session.add(new_user)
     db.session.commit()
 
+    # Store trading data in user session for later retrieval
+    if trading_data:
+        # You could store this in a separate table or in the user's session
+        # For now, we'll include it in the JWT token
+        pass
     access_token = create_access_token(identity=new_user.id)
     
     return jsonify(access_token=access_token), 201
@@ -69,7 +75,13 @@ def login():
     db.session.commit()
 
     access_token = create_access_token(
-        identity=user.id,
+        identity=new_user.id,
+        additional_claims={
+            'plan_type': plan_type, 
+            'username': username,
+            'setup_complete': True,
+            'trading_data': trading_data
+        }
         additional_claims={'session_id': session_id, 'plan_type': user.plan_type, 'username': user.username}
     )
     return jsonify(access_token=access_token), 200

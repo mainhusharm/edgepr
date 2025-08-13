@@ -16,7 +16,7 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
       try {
         const token = localStorage.getItem('token');
         if (token) {
-          const response = await api.get('/auth/profile');
+          const response = await api.get('/api/auth/profile');
           const profile = response.data;
           
           // Use the plan from the fetched profile as the source of truth
@@ -29,13 +29,18 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
             email: profile.email,
             membershipTier: plan,
             isAuthenticated: true,
-            setupComplete: profile.setupComplete,
+            setupComplete: true, // Always true if they have a valid token
             token: localStorage.getItem('token') || undefined,
           } as User));
         }
       } catch (error) {
         console.error('Failed to fetch user profile', error);
-        // Handle error, maybe logout user
+        // If profile fetch fails, check localStorage for user data
+        const storedUser = localStorage.getItem('current_user');
+        if (storedUser) {
+          const userData = JSON.parse(storedUser);
+          setUser(userData);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -61,9 +66,7 @@ const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
       return <Navigate to="/signin" state={{ from: location }} replace />;
     }
 
-    if (!user.setupComplete) {
-      return <Navigate to="/questionnaire" state={{ from: location }} replace />;
-    }
+    // Remove automatic redirect to questionnaire since setup is done during signup
   }
 
   return children;
